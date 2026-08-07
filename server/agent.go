@@ -137,7 +137,7 @@ func RunAgent(ctx context.Context, client ModelClient, index *BlockIndex, questi
 			system = extractiveFinalSystem
 		}
 		prompt := "USER QUESTION:\n" + question + "\n\nCONTROLLER STATE:\n" + state + "\n\nBudget: turn " + itoa(turn) + "/" + itoa(opts.MaxTurns) + ", scanned " + itoa(scanned) + "/" + itoa(opts.ScanBytes) + " source bytes. Choose the next JSON action."
-		raw, err := client.Chat(ctx, ModelRequest{Model: opts.Model, Messages: []NormalizedMessage{{Role: "system", Content: system}, {Role: "user", Content: prompt}}, NumCtx: opts.NumCtx, NumPredict: 256, JSONFormat: true})
+		raw, err := client.Chat(ctx, ModelRequest{Model: opts.Model, Purpose: "controller", Messages: []NormalizedMessage{{Role: "system", Content: system}, {Role: "user", Content: prompt}}, NumCtx: opts.NumCtx, NumPredict: 256, JSONFormat: true})
 		if err != nil {
 			return AgentResult{}, err
 		}

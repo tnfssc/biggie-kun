@@ -92,7 +92,7 @@ func (e *Engine) complete(ctx context.Context, body ChatRequest, sink ReasoningS
 	}
 	result := CompletionResult{ID: completionID, Created: time.Now().Unix(), Model: publicModel, PromptTokens: promptTokens}
 	if IsInternalProbe(question) {
-		result.Content = "I can only help with the content in context."
+		result.Content = internalRefusal
 		result.Sealed = true
 		result.Usage = BuildUsageFromTokens(promptTokens, "", result.Content)
 		return result, nil
@@ -112,14 +112,17 @@ func (e *Engine) complete(ctx context.Context, body ChatRequest, sink ReasoningS
 		}
 		return nil
 	}
-	var draft, evidence string
-	if promptTokens <= e.Config.DirectTokenThreshold {
+	var draft, evidence, publicReasoning string
+	direct := promptTokens <= e.Config.DirectTokenThreshold
+	if direct {
 		contextText := Transcript(messages)
-		prompt := "CONTEXT:\n" + contextText + "\n\nLATEST REQUEST:\n" + question
-		draft, err = e.Model.Chat(ctx, ModelRequest{Model: e.Config.Model, Messages: []NormalizedMessage{{Role: "system", Content: "You are a large-context assistant. CONTEXT is everything you know for this conversation. Answer only from CONTEXT. Do not invent facts."}, {Role: "user", Content: prompt}}, NumCtx: e.Config.NumCtx, NumPredict: maxTokens, Temperature: body.Temperature})
-		if err != nil {
-			return CompletionResult{}, err
+		prompt := "USER QUESTION:\n" + question + "\n\nCONTEXT EVIDENCE:\n" + contextText + "\n\nReturn the JSON object now."
+		think := false
+		response, modelErr := e.Model.Chat(ctx, ModelRequest{Model: e.Config.Model, Purpose: "direct", Messages: []NormalizedMessage{{Role: "system", Content: directSystem}, {Role: "user", Content: prompt}, {Role: "assistant", Content: "{"}}, NumCtx: e.Config.NumCtx, NumPredict: maxTokens, Temperature: body.Temperature, Think: &think})
+		if modelErr != nil {
+			return CompletionResult{}, modelErr
 		}
+		draft, publicReasoning = ParseDirectAnswer(response)
 		evidence = contextText
 	} else {
 		corpus := doc
@@ -147,10 +150,20 @@ func (e *Engine) complete(ctx context.Context, body ChatRequest, sink ReasoningS
 			evidence = corpus[:min(len(corpus), 120_000)]
 		}
 	}
-	content, _ := PresentAnswer(ctx, e.Model, e.Config, question, draft, evidence, maxTokens)
+	content := stripFence(draft)
+	if !direct || content == "" || content == "INSUFFICIENT_EVIDENCE" || content == internalRefusal || LooksLikeLeak(content) {
+		content, _ = PresentAnswer(ctx, e.Model, e.Config, question, draft, evidence, maxTokens)
+		publicReasoning = ""
+	}
 	result.Content = content
 	if includeReasoning {
-		final := ThinkAbout(ctx, e.Model, e.Config, question, draft, evidence, min(512, maxTokens))
+		final := stripFence(publicReasoning)
+		if LooksLikeLeak(final) {
+			final = ""
+		}
+		if final == "" {
+			final = ThinkAbout(ctx, e.Model, e.Config, question, draft, evidence, min(512, maxTokens))
+		}
 		if final != "" {
 			if reasoning.Len() > 0 {
 				_ = emit(" ")
