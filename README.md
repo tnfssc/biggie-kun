@@ -29,10 +29,38 @@ curl -s http://127.0.0.1:11500/v1/chat/completions \
 
 Open. No API keys.
 
-### Memory
+### Memory (`memory_id`)
 
-Pass `user`, `memory_id`, or header `x-memory-id` to keep a continuous RAM
-session across turns. Nothing is written to disk.
+Optional **server-side RAM session** so later turns can reuse prior context
+without resending the full history.
+
+| How to set | Example |
+| --- | --- |
+| JSON body | `"memory_id": "my-session"` |
+| Header | `x-memory-id: my-session` |
+| Header | `x-biggie-memory: my-session` |
+| OpenAI `user` field | `"user": "alice"` → key `user:alice` |
+
+The response echoes `"memory_id"` when a session is active.
+
+```bash
+# turn 1
+curl -s http://127.0.0.1:11500/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -H 'x-memory-id: demo' \
+  -d '{"model":"biggie-kun","messages":[{"role":"user","content":"Code is CODE-ORANGE99."}]}'
+
+# turn 2 — short message; server still has turn 1 in RAM
+curl -s http://127.0.0.1:11500/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -H 'x-memory-id: demo' \
+  -d '{"model":"biggie-kun","messages":[{"role":"user","content":"What is the code?"}]}'
+```
+
+Notes:
+- **Not auth.** Anyone who knows the id can continue that session on this process.
+- **RAM only** — never written to disk. Gone on restart, TTL expiry, or size eviction.
+- **Optional.** You can instead send a full multi-turn `messages` array (standard OpenAI style) with no `memory_id`.
 
 ### Usage
 
