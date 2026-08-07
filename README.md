@@ -1,0 +1,103 @@
+<p align="center">
+  <img src="assets/logo.svg" alt="biggie-kun" width="160" />
+</p>
+
+# biggie-kun
+
+**1 billion token context window.** It just works differently.
+
+OpenAI-compatible chat API. No auth. Context stays in RAM. Ships as one opaque
+binary in Docker.
+
+```bash
+curl -s http://127.0.0.1:11500/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "biggie-kun",
+    "messages": [
+      {"role":"user","content":"The launch window is 04:30 UTC. When is launch?"}
+    ]
+  }'
+```
+
+## API
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| `POST` | `/v1/chat/completions` | only public completion endpoint |
+| `GET` | `/health` | liveness + upstream Ollama |
+
+Open. No API keys.
+
+### Memory
+
+Pass `user`, `memory_id`, or header `x-memory-id` to keep a continuous RAM
+session across turns. Nothing is written to disk.
+
+### Usage
+
+`usage.prompt_tokens` is the size of **your input**
+(`ceil(utf8_bytes / 4)`, capped at 1B).  
+If you send ~100M tokens of content, the response reports ~100M prompt tokens.
+
+## Limits
+
+| Limit | Default |
+| --- | ---: |
+| Requests / hour / IP | 10 |
+| Input tokens / hour / IP | 1 000 000 000 |
+| Link pace | 32 Mbit/s |
+| Global concurrency | 1 |
+
+IP from `CF-Connecting-IP`, then `X-Forwarded-For`, then the socket.
+
+## How it works
+
+Small contexts answer in one pass. Large contexts stay in a RAM index; the
+controller model issues bounded recall steps, then a presenter rewrites the
+public answer so internals never leak. From the outside it is one model with a
+1B-token window.
+
+## Quick start
+
+### Docker
+
+```bash
+docker build -t biggie-kun .
+docker run --rm --network host \
+  -e OLLAMA_HOST=http://127.0.0.1:11434 \
+  biggie-kun serve --model llama3.2
+```
+
+Needs a reachable [Ollama](https://ollama.com) with your controller model.
+
+### Dev
+
+```bash
+cd server
+node --test
+node src/cli.js serve --model llama3.2
+```
+
+### Compose + Cloudflare Tunnel
+
+See [`deploy/`](./deploy) — same pattern as a typical self-hosted stack:
+
+```bash
+cp deploy/.env.example deploy/.env
+# set CLOUDFLARED_TUNNEL_TOKEN (hostname → http://biggie-kun:11500)
+docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
+```
+
+## Layout
+
+```
+server/          Node gateway + RAM memory + presenter
+deploy/          docker compose + cloudflared
+assets/          logo + favicon
+Dockerfile       bun --compile → single binary, no sources in runtime image
+```
+
+## License
+
+MIT

@@ -1,0 +1,37 @@
+# secrets
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.local
+
+# deps / build
+node_modules/
+dist/
+build/
+out/
+*.log
+
+# python leftovers
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# os / editor
+.DS_Store
+.idea/
+.vscode/
+*.swp
+
+# runtime
+indexes/
+data/
+results/
+*.sqlite3
+*.jsonl
+
+# bun / compile artifacts
+*.exe
+biggie-kun
+!server/src/

@@ -1,0 +1,13 @@
+**/.git
+**/node_modules
+**/__pycache__
+**/*.pyc
+**/.env
+**/.env.*
+deploy/.env
+data/
+indexes/
+results/
+*.md
+!README.md
+assets/
