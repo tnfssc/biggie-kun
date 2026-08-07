@@ -23,9 +23,10 @@ RUN apt-get update \
         --shell /usr/sbin/nologin biggie \
     && install -d -o biggie -g biggie /tmp
 
-COPY --from=build --chown=root:root --chmod=755 /out/biggie-kun /usr/local/bin/biggie-kun
+COPY --from=build /out/biggie-kun /usr/local/bin/biggie-kun
 
-RUN test -x /usr/local/bin/biggie-kun \
+RUN chmod 755 /usr/local/bin/biggie-kun \
+    && test -x /usr/local/bin/biggie-kun \
     && if command -v node >/dev/null 2>&1; then echo "node present" >&2; exit 1; fi \
     && if command -v python3 >/dev/null 2>&1; then echo "python3 present" >&2; exit 1; fi
 
