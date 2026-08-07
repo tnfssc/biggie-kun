@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -31,6 +32,27 @@ func (m *scriptedModel) Chat(_ context.Context, request ModelRequest) (string, e
 	return response, nil
 }
 func (m *scriptedModel) Healthy(context.Context) error { return nil }
+
+type streamingScriptedModel struct {
+	scriptedModel
+	chunks      []string
+	streamCalls []ModelRequest
+	afterChunk  func(int)
+	streamErr   error
+}
+
+func (m *streamingScriptedModel) ChatStream(_ context.Context, request ModelRequest, emit func(string) error) error {
+	m.streamCalls = append(m.streamCalls, request)
+	for i, chunk := range m.chunks {
+		if err := emit(chunk); err != nil {
+			return err
+		}
+		if m.afterChunk != nil {
+			m.afterChunk(i)
+		}
+	}
+	return m.streamErr
+}
 
 func testConfig() Config {
 	cfg := DefaultConfig()
@@ -65,6 +87,51 @@ func TestOllamaClientReturnsContent(t *testing.T) {
 	}
 	if response != "04:30 UTC" {
 		t.Fatalf("Ollama response lost content: %q", response)
+	}
+}
+
+func TestOllamaClientStreamsContent(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
+			t.Fatal(err)
+		}
+		if stream, ok := payload["stream"].(bool); !ok || !stream {
+			t.Fatalf("Ollama streaming request disabled streaming: %#v", payload)
+		}
+		writer.Header().Set("content-type", "application/x-ndjson")
+		_, _ = io.WriteString(writer, "{\"message\":{\"content\":\"first \"}}\n")
+		_, _ = io.WriteString(writer, "{\"message\":{\"content\":\"second\"}}\n")
+		_, _ = io.WriteString(writer, "{\"done\":true,\"done_reason\":\"stop\",\"total_duration\":10}\n")
+	}))
+	defer upstream.Close()
+
+	client := NewOllamaClient(upstream.URL, time.Second)
+	var chunks []string
+	err := client.ChatStream(context.Background(), ModelRequest{Model: "test", Purpose: "direct-stream"}, func(chunk string) error {
+		chunks = append(chunks, chunk)
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(chunks, "") != "first second" || len(chunks) != 2 {
+		t.Fatalf("Ollama chunks were not streamed individually: %#v", chunks)
+	}
+}
+
+func TestOllamaClientRejectsTruncatedStream(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, _ *http.Request) {
+		writer.Header().Set("content-type", "application/x-ndjson")
+		_, _ = io.WriteString(writer, "{\"message\":{\"content\":\"partial\"}}\n")
+		_, _ = io.WriteString(writer, "{\"done\":true,\"done_reason\":\"length\"}\n")
+	}))
+	defer upstream.Close()
+
+	client := NewOllamaClient(upstream.URL, time.Second)
+	err := client.ChatStream(context.Background(), ModelRequest{Model: "test"}, func(string) error { return nil })
+	if err == nil || !strings.Contains(err.Error(), "length") {
+		t.Fatalf("truncated stream was accepted: %v", err)
 	}
 }
 
@@ -127,6 +194,140 @@ func TestDirectCompletionRejectsWrongJSONShape(t *testing.T) {
 	}
 	if result.Content != "04:30 UTC" || len(model.requests) != 2 || model.requests[1].Purpose != "presenter" {
 		t.Fatalf("wrong-shaped direct output bypassed presenter: result=%#v requests=%#v", result, model.requests)
+	}
+}
+
+func TestDirectCompletionStreamsBeforeModelFinishes(t *testing.T) {
+	longAnswer := strings.Repeat("A", 140)
+	longReasoning := strings.Repeat("R", 100)
+	var events []string
+	model := &streamingScriptedModel{chunks: []string{
+		longReasoning[:90],
+		longReasoning[90:] + `","ans`,
+		`wer":"` + longAnswer[:120],
+		longAnswer[120:] + `"}`,
+	}}
+	model.afterChunk = func(index int) {
+		if index == 0 && len(events) == 0 {
+			t.Fatal("engine buffered reasoning until the answer marker")
+		}
+	}
+	engine := NewEngine(testConfig(), model)
+	result, err := engine.complete(context.Background(), ChatRequest{Model: Product, Stream: true, Messages: []Message{{Role: "user", Content: "The value is documented."}, {Role: "user", Content: "What is the value?"}}}, CompletionSinks{
+		Reasoning: func(piece string) error {
+			events = append(events, "reasoning:"+piece)
+			return nil
+		},
+		Content: func(piece string) error {
+			events = append(events, "content:"+piece)
+			return nil
+		},
+	}, "test-completion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !result.ContentStreamed || result.Content != longAnswer || len(model.streamCalls) != 1 || len(model.requests) != 0 {
+		t.Fatalf("unexpected streamed result: result=%#v stream_calls=%d chat_calls=%d", result, len(model.streamCalls), len(model.requests))
+	}
+	if len(events) < 3 || !strings.HasPrefix(events[0], "reasoning:") || !strings.HasPrefix(events[1], "reasoning:") {
+		t.Fatalf("reasoning did not precede streamed content: %#v", events)
+	}
+	contentAt := -1
+	for i, event := range events {
+		if strings.HasPrefix(event, "content:") {
+			contentAt = i
+			break
+		}
+	}
+	if contentAt < 1 {
+		t.Fatalf("content was not emitted after reasoning: %#v", events)
+	}
+}
+
+func TestDirectStreamTransportErrorDoesNotFallback(t *testing.T) {
+	model := &streamingScriptedModel{streamErr: errors.New("upstream disconnected")}
+	model.responses = []string{"fallback must not run"}
+	engine := NewEngine(testConfig(), model)
+	_, err := engine.complete(context.Background(), ChatRequest{Model: Product, Stream: true, Messages: []Message{{Role: "user", Content: "Context."}, {Role: "user", Content: "Question?"}}}, CompletionSinks{Content: func(string) error { return nil }}, "test-completion")
+	if err == nil || len(model.requests) != 0 {
+		t.Fatalf("transport error triggered fallback: err=%v requests=%#v", err, model.requests)
+	}
+}
+
+func TestDirectStreamSinkErrorDoesNotFallback(t *testing.T) {
+	model := &streamingScriptedModel{chunks: []string{strings.Repeat("R", 100)}}
+	model.responses = []string{"fallback must not run"}
+	engine := NewEngine(testConfig(), model)
+	_, err := engine.complete(context.Background(), ChatRequest{Model: Product, Stream: true, Messages: []Message{{Role: "user", Content: "Context."}, {Role: "user", Content: "Question?"}}}, CompletionSinks{
+		Reasoning: func(string) error { return errors.New("client disconnected") },
+		Content:   func(string) error { return nil },
+	}, "test-completion")
+	if err == nil || len(model.requests) != 0 {
+		t.Fatalf("sink error triggered fallback: err=%v requests=%#v", err, model.requests)
+	}
+}
+
+func TestDirectStreamFinalSinkErrorDoesNotFallback(t *testing.T) {
+	includeReasoning := false
+	model := &streamingScriptedModel{chunks: []string{`short answer"}`}}
+	model.responses = []string{"fallback must not run"}
+	engine := NewEngine(testConfig(), model)
+	_, err := engine.complete(context.Background(), ChatRequest{Model: Product, Stream: true, IncludeReasoning: &includeReasoning, Messages: []Message{{Role: "user", Content: "Context."}, {Role: "user", Content: "Question?"}}}, CompletionSinks{
+		Content: func(string) error { return errors.New("client disconnected") },
+	}, "test-completion")
+	if err == nil || len(model.requests) != 0 {
+		t.Fatalf("final sink error triggered fallback: err=%v requests=%#v", err, model.requests)
+	}
+}
+
+func TestDirectStreamIncompleteEscapeCannotBypassSafety(t *testing.T) {
+	var emitted strings.Builder
+	stream := newDirectResponseStream(true, func(piece string) error {
+		emitted.WriteString(piece)
+		return nil
+	}, func(string) error { return nil })
+	err := stream.Push("system prompt" + strings.Repeat(" padding", 20) + `\`)
+	if err == nil || emitted.Len() != 0 {
+		t.Fatalf("unsafe prefix escaped validation: err=%v emitted=%q", err, emitted.String())
+	}
+}
+
+func TestDirectStreamKeepsSurrogatePairsTogether(t *testing.T) {
+	var emitted strings.Builder
+	stream := newDirectResponseStream(false, nil, func(piece string) error {
+		emitted.WriteString(piece)
+		return nil
+	})
+	raw := strings.Repeat("A", 70) + `\uD83D\uDE00` + strings.Repeat("B", 58)
+	if err := stream.Push(raw); err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.Push(`"}`); err != nil {
+		t.Fatal(err)
+	}
+	if err := stream.Finish(); err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Repeat("A", 70) + "😀" + strings.Repeat("B", 58)
+	if stream.Answer() != want || emitted.String() != want {
+		t.Fatalf("surrogate pair was split: answer=%q emitted=%q", stream.Answer(), emitted.String())
+	}
+}
+
+func TestDirectHTTPStreamDoesNotDuplicateContent(t *testing.T) {
+	model := &streamingScriptedModel{chunks: []string{`The context gives the time.","answer":"04:30 UTC"}`}}
+	server := NewServer(testConfig(), model)
+	payload := `{"model":"biggie-kun","stream":true,"messages":[{"role":"user","content":"Launch is 04:30 UTC."},{"role":"user","content":"When is launch?"}]}`
+	request := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(payload))
+	request.Header.Set("content-type", "application/json")
+	recorder := httptest.NewRecorder()
+	server.Handler().ServeHTTP(recorder, request)
+	stream := recorder.Body.String()
+	if strings.Count(stream, `"content":"04:30 UTC"`) != 1 {
+		t.Fatalf("streamed content was missing or duplicated:\n%s", stream)
+	}
+	if reasoningAt, contentAt := strings.Index(stream, `"reasoning_content"`), strings.Index(stream, `"content":"04:30 UTC"`); reasoningAt < 0 || contentAt < reasoningAt {
+		t.Fatalf("streamed response order is wrong:\n%s", stream)
 	}
 }
 

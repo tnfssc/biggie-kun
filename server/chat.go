@@ -25,6 +25,12 @@ type CompletionResult struct {
 	PromptTokens              int64
 	Usage                     Usage
 	Sealed                    bool
+	ContentStreamed           bool
+}
+
+type CompletionSinks struct {
+	Reasoning ReasoningSink
+	Content   func(string) error
 }
 
 type Engine struct {
@@ -56,10 +62,10 @@ func randomID() string {
 }
 
 func (e *Engine) Complete(ctx context.Context, body ChatRequest, sink ReasoningSink) (CompletionResult, error) {
-	return e.complete(ctx, body, sink, "")
+	return e.complete(ctx, body, CompletionSinks{Reasoning: sink}, "")
 }
 
-func (e *Engine) complete(ctx context.Context, body ChatRequest, sink ReasoningSink, completionID string) (CompletionResult, error) {
+func (e *Engine) complete(ctx context.Context, body ChatRequest, sinks CompletionSinks, completionID string) (CompletionResult, error) {
 	messages, err := NormalizeMessages(body.Messages)
 	if err != nil {
 		return CompletionResult{}, err
@@ -107,13 +113,18 @@ func (e *Engine) complete(ctx context.Context, body ChatRequest, sink ReasoningS
 			return nil
 		}
 		reasoning.WriteString(piece)
-		if sink != nil {
-			return sink(piece)
+		if sinks.Reasoning != nil {
+			return sinks.Reasoning(piece)
 		}
 		return nil
 	}
 	var draft, evidence, publicReasoning string
 	direct := promptTokens <= e.Config.DirectTokenThreshold
+	if direct && sinks.Content != nil {
+		if client, ok := e.Model.(StreamingModelClient); ok {
+			return e.completeDirectStream(ctx, client, body, messages, question, includeReasoning, maxTokens, result, sinks)
+		}
+	}
 	if direct {
 		contextText := Transcript(messages)
 		prompt := "USER QUESTION:\n" + question + "\n\nCONTEXT EVIDENCE:\n" + contextText + "\n\nReturn the JSON object now."

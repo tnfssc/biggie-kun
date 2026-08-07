@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net"
 	"net/http"
 	"strconv"
@@ -240,17 +241,24 @@ func (s *Server) streamChat(w http.ResponseWriter, r *http.Request, body ChatReq
 	id := randomID()
 	created := time.Now().Unix()
 	_ = writeSSE(w, chunk(id, model, created, map[string]any{"role": "assistant"}, nil, nil))
-	sink := func(piece string) error {
+	reasoningSink := func(piece string) error {
 		return writeSSE(w, chunk(id, model, time.Now().Unix(), map[string]any{"reasoning_content": piece}, nil, nil))
 	}
-	result, err := s.engine.complete(r.Context(), body, sink, id)
+	contentSink := func(piece string) error {
+		return writeSSE(w, chunk(id, model, time.Now().Unix(), map[string]any{"content": piece}, nil, nil))
+	}
+	result, err := s.engine.complete(r.Context(), body, CompletionSinks{Reasoning: reasoningSink, Content: contentSink}, id)
 	if err != nil {
-		_ = writeSSE(w, map[string]any{"error": map[string]any{"message": err.Error(), "type": "upstream_error", "code": "upstream_error"}})
+		s.limiter.Commit(clientIP(r), fallbackTokens)
+		log.Printf("stream completion failed: %v", err)
+		_ = writeSSE(w, map[string]any{"error": map[string]any{"message": "upstream request failed", "type": "upstream_error", "code": "upstream_error"}})
 		_ = writeSSE(w, "[DONE]")
 		return
 	}
-	for _, piece := range ChunkText(result.Content, 32) {
-		_ = writeSSE(w, chunk(id, result.Model, time.Now().Unix(), map[string]any{"content": piece}, nil, nil))
+	if !result.ContentStreamed {
+		for _, piece := range ChunkText(result.Content, 32) {
+			_ = writeSSE(w, chunk(id, result.Model, time.Now().Unix(), map[string]any{"content": piece}, nil, nil))
+		}
 	}
 	billed := result.Usage.PromptTokens
 	if billed == 0 {
