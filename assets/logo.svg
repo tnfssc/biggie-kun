@@ -1,96 +1,26 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="biggie-kun">
-  <!-- soft ground shadow -->
-  <ellipse cx="256" cy="468" rx="118" ry="14" fill="#1a2744" opacity="0.06"/>
-
+  <!-- soft shadow -->
+  <ellipse cx="256" cy="470" rx="140" ry="18" fill="#1a2744" opacity="0.06"/>
   <!-- body -->
-  <path
-    d="M256 48
-       C148 48 72 128 72 230
-       C72 300 96 360 130 400
-       C150 424 180 448 210 460
-       C220 464 236 456 242 444
-       L248 428
-       C250 422 254 420 256 420
-       C258 420 262 422 264 428
-       L270 444
-       C276 456 292 464 302 460
-       C332 448 362 424 382 400
-       C416 360 440 300 440 230
-       C440 128 364 48 256 48 Z"
+  <ellipse
+    cx="256" cy="256"
+    rx="210" ry="198"
     fill="#ffffff"
     stroke="#1a2744"
-    stroke-width="14"
-    stroke-linejoin="round"
+    stroke-width="22"
   />
-
-  <!-- left arm (akimbo) -->
-  <path
-    d="M118 250
-       C88 270 78 310 96 340
-       C108 360 130 366 148 350
-       C160 340 162 320 156 300
-       C150 278 136 258 118 250 Z"
-    fill="#ffffff"
-    stroke="#1a2744"
-    stroke-width="14"
-    stroke-linejoin="round"
-  />
-
-  <!-- right arm -->
-  <path
-    d="M394 250
-       C424 270 434 310 416 340
-       C404 360 382 366 364 350
-       C352 340 350 320 356 300
-       C362 278 376 258 394 250 Z"
-    fill="#ffffff"
-    stroke="#1a2744"
-    stroke-width="14"
-    stroke-linejoin="round"
-  />
-
-  <!-- left foot -->
-  <path
-    d="M190 430
-       C170 450 160 470 178 478
-       C196 486 220 470 228 452
-       C232 442 220 428 190 430 Z"
-    fill="#ffffff"
-    stroke="#1a2744"
-    stroke-width="14"
-    stroke-linejoin="round"
-  />
-
-  <!-- right foot -->
-  <path
-    d="M322 430
-       C342 450 352 470 334 478
-       C316 486 292 470 284 452
-       C280 442 292 428 322 430 Z"
-    fill="#ffffff"
-    stroke="#1a2744"
-    stroke-width="14"
-    stroke-linejoin="round"
-  />
-
   <!-- eyes -->
-  <ellipse cx="200" cy="210" rx="18" ry="22" fill="#1a2744"/>
-  <ellipse cx="312" cy="210" rx="18" ry="22" fill="#1a2744"/>
-  <!-- eye highlights -->
-  <circle cx="207" cy="202" r="5" fill="#ffffff"/>
-  <circle cx="319" cy="202" r="5" fill="#ffffff"/>
-
+  <ellipse cx="196" cy="220" rx="24" ry="30" fill="#1a2744"/>
+  <ellipse cx="316" cy="220" rx="24" ry="30" fill="#1a2744"/>
   <!-- blush -->
-  <ellipse cx="168" cy="248" rx="22" ry="14" fill="#f5a8a0" opacity="0.9"/>
-  <ellipse cx="344" cy="248" rx="22" ry="14" fill="#f5a8a0" opacity="0.9"/>
-
+  <ellipse cx="154" cy="268" rx="34" ry="22" fill="#f5a8a0"/>
+  <ellipse cx="358" cy="268" rx="34" ry="22" fill="#f5a8a0"/>
   <!-- smile -->
   <path
-    d="M220 268
-       C236 288 276 288 292 268"
+    d="M210 292 C230 324 282 324 302 292"
     fill="none"
     stroke="#1a2744"
-    stroke-width="12"
+    stroke-width="20"
     stroke-linecap="round"
   />
 </svg>
