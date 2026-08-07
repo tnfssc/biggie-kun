@@ -5,15 +5,15 @@ services:
       dockerfile: Dockerfile
     image: biggie-kun:local
     restart: unless-stopped
+    # Host network: Ollama on the box is bound to 127.0.0.1 only.
+    network_mode: host
     # Context lives in RAM only — no document/index volume mounts.
     tmpfs:
       - /tmp:size=64m,mode=1777
     read_only: true
     environment:
-      OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      OLLAMA_HOST: ${OLLAMA_HOST:-http://127.0.0.1:11434}
       BIGGIE_MODEL: ${BIGGIE_MODEL:-llama3.2}
-    extra_hosts:
-      - "host.docker.internal:host-gateway"
     command:
       - serve
       - --listen
@@ -21,7 +21,7 @@ services:
       - --port
       - "11500"
       - --ollama-host
-      - ${OLLAMA_HOST:-http://host.docker.internal:11434}
+      - ${OLLAMA_HOST:-http://127.0.0.1:11434}
       - --model
       - ${BIGGIE_MODEL:-llama3.2}
     healthcheck:
@@ -32,8 +32,9 @@ services:
       start_period: 20s
 
   cloudflared:
-    # Public hostname should target http://biggie-kun:11500
+    # Public hostname should target http://127.0.0.1:11500 (host network).
     image: cloudflare/cloudflared:latest
+    network_mode: host
     command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TUNNEL_TOKEN:?set CLOUDFLARED_TUNNEL_TOKEN in .env}
     restart: unless-stopped
     depends_on:

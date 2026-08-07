@@ -9,4 +9,5 @@ cp .env.example .env
 docker compose --env-file .env -f docker-compose.yml up -d --build
 ```
 
-Cloudflare public hostname service URL: `http://biggie-kun:11500`.
+Cloudflare public hostname service URL: `http://127.0.0.1:11500`
+(compose uses `network_mode: host` so the app can reach host Ollama on loopback).
