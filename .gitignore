@@ -26,4 +26,4 @@ results/
 
 # compile artifacts
 *.exe
-biggie-kun
+/biggie-kun
