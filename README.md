@@ -40,6 +40,27 @@ session across turns. Nothing is written to disk.
 (`ceil(utf8_bytes / 4)`, capped at 1B).  
 If you send ~100M tokens of content, the response reports ~100M prompt tokens.
 
+`completion_tokens` = reasoning + answer.  
+`completion_tokens_details.reasoning_tokens` = reasoning only.
+
+### Streaming + reasoning
+
+```bash
+curl -N http://127.0.0.1:11500/v1/chat/completions \
+  -H 'content-type: application/json' \
+  -d '{
+    "model": "biggie-kun",
+    "stream": true,
+    "include_reasoning": true,
+    "messages": [
+      {"role":"user","content":"The launch window is 04:30 UTC. When is launch?"}
+    ]
+  }'
+```
+
+SSE order: `role` → `delta.reasoning_content*` → `delta.content*` → `finish_reason` + `usage` → `[DONE]`.  
+Set `"include_reasoning": false` to skip thinking.
+
 ## Limits
 
 | Limit | Default |

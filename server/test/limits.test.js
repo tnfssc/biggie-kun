@@ -112,17 +112,32 @@ describe("usage mirrors caller input", () => {
   it("100M-token-scale input reports ~100M prompt_tokens", () => {
     // 400_000_000 UTF-8 bytes / 4 = 100_000_000 tokens
     const input = "a".repeat(400_000_000);
-    const usage = buildUsage(input, "ok");
+    const usage = buildUsage(input, "", "ok");
     assert.equal(usage.prompt_tokens, 100_000_000);
     assert.equal(usage.completion_tokens, 1); // "ok" is 2 bytes -> ceil(2/4)=1
+    assert.equal(usage.completion_tokens_details.reasoning_tokens, 0);
     assert.equal(usage.total_tokens, 100_000_001);
   });
 
-  it("reports exact ceil(bytes/4) of their text", () => {
-    const input = "x".repeat(400); // 400 bytes -> 100 tokens
-    const usage = buildUsage(input, "hello"); // 5 bytes -> 2 tokens
+  it("counts reasoning into completion_tokens", () => {
+    const input = "x".repeat(400); // 100 tokens
+    const reasoning = "y".repeat(40); // 10 tokens
+    const answer = "hello"; // 2 tokens
+    const usage = buildUsage(input, reasoning, answer);
     assert.equal(usage.prompt_tokens, 100);
-    assert.equal(usage.completion_tokens, 2);
+    assert.equal(usage.completion_tokens_details.reasoning_tokens, 10);
+    assert.equal(usage.completion_tokens, 12);
+    assert.equal(usage.total_tokens, 112);
+  });
+});
+
+import { chunkText } from "../src/thinker.js";
+
+describe("stream chunks", () => {
+  it("splits reasoning into pieces", () => {
+    const parts = chunkText("hello world from biggie", 8);
+    assert.ok(parts.length >= 2);
+    assert.equal(parts.join(""), "hello world from biggie");
   });
 });
 

@@ -1,10 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { LocalBlockIndex } from "./block_index.js";
 import { runAgent } from "./agent.js";
-import { estimateMessagesTokens, estimateTokens } from "./limits.js";
+import { estimateTokens } from "./limits.js";
 import { ram } from "./memory.js";
 import { ollamaChat } from "./ollama.js";
-import { isInternalProbe, presentAnswer, presentDirect } from "./presenter.js";
+import { isInternalProbe, presentAnswer } from "./presenter.js";
+import { thinkAbout } from "./thinker.js";
 
 export const PRODUCT = "biggie-kun";
 export const CONTEXT_WINDOW = 1_000_000_000;
@@ -81,13 +82,15 @@ export function splitQuestionAndDocument(messages) {
 }
 
 /**
- * usage.prompt_tokens = the caller's input size (what they put in).
- * If they send ~100M tokens of content, we report ~100_000_000 — never backend crumbs.
- * usage.completion_tokens = size of the assistant output only.
+ * prompt_tokens = caller's input size.
+ * completion_tokens = reasoning + answer.
+ * reasoning_tokens = reasoning only.
  */
-export function buildUsage(inputText, completionText) {
+export function buildUsage(inputText, reasoningText, completionText) {
   const prompt_tokens = Math.min(CONTEXT_WINDOW, estimateTokens(inputText));
-  const completion_tokens = estimateTokens(completionText);
+  const reasoning_tokens = estimateTokens(reasoningText || "");
+  const answer_tokens = estimateTokens(completionText || "");
+  const completion_tokens = reasoning_tokens + answer_tokens;
   return {
     prompt_tokens,
     completion_tokens,
@@ -95,27 +98,36 @@ export function buildUsage(inputText, completionText) {
       CONTEXT_WINDOW + completion_tokens,
       prompt_tokens + completion_tokens,
     ),
+    completion_tokens_details: {
+      reasoning_tokens,
+      accepted_prediction_tokens: 0,
+    },
   };
 }
 
-/**
- * @param {object} opts
- * @param {string} opts.model
- * @param {string} opts.content - assistant output
- * @param {string} opts.inputText - caller's full input text for this turn's window
- * @param {string|null} [opts.memoryId]
- */
-export function openaiResponse({ model, content, inputText, memoryId }) {
-  const usage = buildUsage(inputText, content);
+export function openaiResponse({
+  model,
+  content,
+  reasoning,
+  inputText,
+  memoryId,
+  id,
+  created,
+}) {
+  const usage = buildUsage(inputText, reasoning, content);
+  const message = { role: "assistant", content };
+  if (reasoning) message.reasoning_content = reasoning;
+  else message.reasoning_content = null;
+
   const payload = {
-    id: `chatcmpl-${randomUUID().replace(/-/g, "").slice(0, 24)}`,
+    id: id || `chatcmpl-${randomUUID().replace(/-/g, "").slice(0, 24)}`,
     object: "chat.completion",
-    created: Math.floor(Date.now() / 1000),
+    created: created || Math.floor(Date.now() / 1000),
     model,
     choices: [
       {
         index: 0,
-        message: { role: "assistant", content },
+        message,
         finish_reason: "stop",
       },
     ],
@@ -138,21 +150,23 @@ function sessionKey(body, reqHeaders) {
     reqHeaders?.["x-biggie-memory"] ||
     body?.memory_id;
   if (typeof header === "string" && header.trim()) return header.trim().slice(0, 128);
-  // OpenAI `user` field is a stable end-user id — use as RAM memory key when set.
   if (typeof body?.user === "string" && body.user.trim()) {
     return `user:${body.user.trim().slice(0, 120)}`;
   }
   return null;
 }
 
-export async function handleChatCompletion(body, cfg, reqHeaders = {}) {
-  const messages = normalizeMessages(body.messages);
-  if (body.stream === true) {
-    const err = new Error("stream=true is not supported");
-    err.code = "bad_request";
-    throw err;
-  }
+function wantReasoning(body) {
+  if (body?.include_reasoning === false) return false;
+  if (body?.reasoning === false) return false;
+  return true; // default on
+}
 
+/**
+ * Core completion. Returns fields for both JSON and SSE responses.
+ */
+export async function completeChat(body, cfg, reqHeaders = {}) {
+  const messages = normalizeMessages(body.messages);
   const publicModel =
     typeof body.model === "string" && body.model.trim()
       ? body.model.trim()
@@ -165,51 +179,49 @@ export async function handleChatCompletion(body, cfg, reqHeaders = {}) {
     1,
     Math.min(Number.parseInt(body.max_tokens, 10) || 1024, 8192),
   );
+  const includeReasoning = wantReasoning(body);
+  const id = `chatcmpl-${randomUUID().replace(/-/g, "").slice(0, 24)}`;
+  const created = Math.floor(Date.now() / 1000);
 
   const memoryId = sessionKey(body, reqHeaders);
-  // Caller's input = raw message contents (what they sent). Plus prior RAM memory.
   const requestInputText = messages.map((m) => m.content).join("");
   const requestTranscript = transcriptOf(messages);
-  // One continuous memory blob in RAM (prior session + this request).
   const loaded = ram.load(memoryId, requestTranscript);
   const contextText = loaded.text;
-  // prompt_tokens must reflect everything in the window that came from them.
-  const inputForUsage = memoryId && loaded.fromSession
-    ? loaded.text
-        .replace(/^\[(?:system|user|assistant|tool)\]\n/gm, "")
-        .replace(/\n\n---\n\n/g, "")
-    : requestInputText;
+  const inputForUsage =
+    memoryId && loaded.fromSession
+      ? loaded.text
+          .replace(/^\[(?:system|user|assistant|tool)\]\n/gm, "")
+          .replace(/\n\n---\n\n/g, "")
+      : requestInputText;
   const contextTokens = estimateTokens(contextText);
 
   const { question, document: requestDoc } = splitQuestionAndDocument(messages);
 
-  // Seal internals probes before any model / agent work.
   if (isInternalProbe(question)) {
     const content = "I can only help with the content in context.";
-    return openaiResponse({
+    return {
+      id,
+      created,
       model: publicModel,
       content,
+      reasoning: "",
       inputText: inputForUsage,
       memoryId,
-    });
+      usage: buildUsage(inputForUsage, "", content),
+      sealed: true,
+    };
   }
 
-  // Resolve the remembered corpus + current question.
   let doc = requestDoc;
   let q = question;
   if (memoryId && loaded.fromSession) {
-    // Prior RAM memory is the long-term corpus; last user turn is the question.
     doc = loaded.text;
     q = question;
   } else if (!doc.trim()) {
     doc = contextText;
   }
 
-  let content;
-
-  // Always answer from the single RAM memory blob + latest question.
-  // Small blobs go through one chat call; large blobs use in-RAM recall.
-  // Either way usage/prompt counts the whole memory as one context window.
   const memoryMessages = [
     {
       role: "system",
@@ -222,6 +234,9 @@ export async function handleChatCompletion(body, cfg, reqHeaders = {}) {
     },
   ];
 
+  let draft;
+  let evidenceText;
+
   if (contextTokens <= cfg.directTokenThreshold) {
     const result = await ollamaChat({
       host: cfg.ollamaHost,
@@ -231,16 +246,8 @@ export async function handleChatCompletion(body, cfg, reqHeaders = {}) {
       numPredict: maxTokens,
       temperature,
     });
-    const draft = String(result?.message?.content ?? "");
-    content = await presentAnswer({
-      host: cfg.ollamaHost,
-      model: backendModel,
-      numCtx: cfg.numCtx,
-      userQuestion: question,
-      draftAnswer: draft,
-      evidenceText: contextText,
-      maxTokens,
-    });
+    draft = String(result?.message?.content ?? "");
+    evidenceText = contextText;
   } else {
     const corpus = doc.trim() ? doc : contextText;
     const index = new LocalBlockIndex(corpus, {
@@ -256,34 +263,63 @@ export async function handleChatCompletion(body, cfg, reqHeaders = {}) {
       numCtx: cfg.numCtx,
       scanCharacterBudget: cfg.scanCharacters,
     });
-    const draft = agent.answer || "INSUFFICIENT_EVIDENCE";
-    const evidenceText = evidenceBlob(agent.evidence) || corpus.slice(0, 120_000);
-    content = await presentAnswer({
+    draft = agent.answer || "INSUFFICIENT_EVIDENCE";
+    evidenceText = evidenceBlob(agent.evidence) || corpus.slice(0, 120_000);
+    index.source = "";
+    index.blocks.length = 0;
+    index.postings.clear();
+  }
+
+  const content = await presentAnswer({
+    host: cfg.ollamaHost,
+    model: backendModel,
+    numCtx: cfg.numCtx,
+    userQuestion: question,
+    draftAnswer: draft,
+    evidenceText,
+    maxTokens,
+  });
+
+  let reasoning = "";
+  if (includeReasoning) {
+    reasoning = await thinkAbout({
       host: cfg.ollamaHost,
       model: backendModel,
       numCtx: cfg.numCtx,
       userQuestion: question,
       draftAnswer: draft,
       evidenceText,
-      maxTokens,
+      maxTokens: Math.min(512, maxTokens),
     });
-    // Drop index — GC only, never flushed to disk.
-    index.source = "";
-    index.blocks.length = 0;
-    index.postings.clear();
   }
 
-  // Append assistant turn into RAM memory so it stays one continuous thing.
   if (memoryId) {
     const next = `${contextText}\n\n[assistant]\n${content}`;
     ram.save(memoryId, next);
   }
 
-  return openaiResponse({
+  return {
+    id,
+    created,
     model: publicModel,
     content,
-    // Their input size — e.g. 100M tokens in => prompt_tokens ≈ 100_000_000.
+    reasoning,
     inputText: inputForUsage,
     memoryId,
+    usage: buildUsage(inputForUsage, reasoning, content),
+    sealed: false,
+  };
+}
+
+export async function handleChatCompletion(body, cfg, reqHeaders = {}) {
+  const result = await completeChat(body, cfg, reqHeaders);
+  return openaiResponse({
+    id: result.id,
+    created: result.created,
+    model: result.model,
+    content: result.content,
+    reasoning: result.reasoning,
+    inputText: result.inputText,
+    memoryId: result.memoryId,
   });
 }

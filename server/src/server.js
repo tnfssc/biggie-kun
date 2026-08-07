@@ -4,6 +4,7 @@ import {
   CONTEXT_WINDOW,
   DIRECT_TOKEN_THRESHOLD,
   PRODUCT,
+  completeChat,
   handleChatCompletion,
 } from "./chat.js";
 import {
@@ -19,6 +20,7 @@ import {
 } from "./limits.js";
 import { ram } from "./memory.js";
 import { ollamaHealthy } from "./ollama.js";
+import { streamCompletion } from "./stream.js";
 
 export function clientIp(req) {
   const cf = req.headers["cf-connecting-ip"];
@@ -94,6 +96,8 @@ export function createServer(cfg) {
             ollama_reachable: ok,
             ollama_error: ok ? null : health?.error || "unreachable",
             model: cfg.model,
+            stream: true,
+            reasoning: true,
             limits: {
               req_per_hour: cfg.reqPerHour,
               tokens_per_hour: cfg.tokensPerHour,
@@ -210,7 +214,6 @@ export function createServer(cfg) {
             return;
           }
 
-          // Bill the caller's real input size (message contents), not backend crumbs.
           const joinedPreview = Array.isArray(body.messages)
             ? body.messages
                 .map((m) => {
@@ -223,7 +226,6 @@ export function createServer(cfg) {
             : "";
           const promptTokens =
             estimateTokens(joinedPreview) || Math.ceil(raw.length / 4);
-          // Drop raw bytes ASAP — never log or spill request content to disk.
           raw.fill?.(0);
           const budget = limiter.check(ip, promptTokens);
           if (!budget.ok) {
@@ -244,31 +246,51 @@ export function createServer(cfg) {
             return;
           }
 
-          let result;
+          const stream = body.stream === true;
           try {
-            result = await handleChatCompletion(body, cfg, req.headers);
+            if (stream) {
+              const result = await completeChat(body, cfg, req.headers);
+              const billed = result.usage?.prompt_tokens || promptTokens;
+              const rate = limiter.commit(ip, billed);
+              await streamCompletion(res, throttle, {
+                id: result.id,
+                model: result.model,
+                reasoning: result.reasoning,
+                content: result.content,
+                usage: result.usage,
+                extraHeaders: {
+                  "x-biggie-context-window": String(CONTEXT_WINDOW),
+                  ...rateHeaders(rate),
+                },
+              });
+            } else {
+              const result = await handleChatCompletion(body, cfg, req.headers);
+              const billed = result?.usage?.prompt_tokens || promptTokens;
+              const rate = limiter.commit(ip, billed);
+              await sendJson(res, 200, result, throttle, rateHeaders(rate));
+            }
           } catch (error) {
             const code = error.code || "internal_error";
             const status =
               code === "bad_request" ? 400 : error.status ? 502 : 500;
-            await sendJson(
-              res,
-              status,
-              {
-                error: {
-                  message: String(error.message || error),
-                  type: code,
-                  code,
+            if (!res.headersSent) {
+              await sendJson(
+                res,
+                status,
+                {
+                  error: {
+                    message: String(error.message || error),
+                    type: code,
+                    code,
+                  },
                 },
-              },
-              throttle,
-            );
+                throttle,
+              );
+            } else {
+              res.destroy(error);
+            }
             return;
           }
-
-          const billed = result?.usage?.prompt_tokens || promptTokens;
-          const usage = limiter.commit(ip, billed);
-          await sendJson(res, 200, result, throttle, rateHeaders(usage));
         } finally {
           flight.release(holder);
         }
@@ -345,6 +367,8 @@ export function start(cfg = defaultConfig()) {
         ollama_host: cfg.ollamaHost,
         model: cfg.model,
         endpoint: "/v1/chat/completions",
+        stream: true,
+        reasoning: true,
         auth: "none",
         memory: "ram",
         disk_context: false,
