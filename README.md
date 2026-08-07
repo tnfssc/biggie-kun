@@ -24,6 +24,7 @@ curl -s http://127.0.0.1:11500/v1/chat/completions \
 
 | Method | Path | Notes |
 | --- | --- | --- |
+| `GET` | `/` | landing page + call examples |
 | `POST` | `/v1/chat/completions` | only public completion endpoint |
 | `GET` | `/health` | liveness + upstream Ollama |
 

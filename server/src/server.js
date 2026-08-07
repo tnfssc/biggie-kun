@@ -20,6 +20,7 @@ import {
 } from "./limits.js";
 import { ram } from "./memory.js";
 import { ollamaHealthy } from "./ollama.js";
+import { FAVICON_SVG, landingHtml } from "./site.js";
 import { streamCompletion } from "./stream.js";
 
 export function clientIp(req) {
@@ -80,6 +81,29 @@ export function createServer(cfg) {
         res.setHeader("access-control-allow-headers", "*");
         res.setHeader("access-control-allow-methods", "GET, POST, OPTIONS");
         res.end();
+        return;
+      }
+
+      if (req.method === "GET" && (path === "/" || path === "/index.html")) {
+        const body = Buffer.from(landingHtml(), "utf8");
+        res.statusCode = 200;
+        res.setHeader("content-type", "text/html; charset=utf-8");
+        res.setHeader("content-length", String(body.length));
+        res.setHeader("cache-control", "public, max-age=60");
+        res.setHeader("access-control-allow-origin", "*");
+        await writeThrottled(res, body, throttle);
+        await new Promise((resolve) => res.end(() => resolve()));
+        return;
+      }
+
+      if (req.method === "GET" && path === "/favicon.svg") {
+        const body = Buffer.from(FAVICON_SVG, "utf8");
+        res.statusCode = 200;
+        res.setHeader("content-type", "image/svg+xml");
+        res.setHeader("content-length", String(body.length));
+        res.setHeader("cache-control", "public, max-age=86400");
+        await writeThrottled(res, body, throttle);
+        await new Promise((resolve) => res.end(() => resolve()));
         return;
       }
 
@@ -302,7 +326,7 @@ export function createServer(cfg) {
         404,
         {
           error: {
-            message: "only GET /health and POST /v1/chat/completions",
+            message: "only GET /, GET /health, and POST /v1/chat/completions",
             type: "not_found",
             code: "not_found",
           },
@@ -367,6 +391,7 @@ export function start(cfg = defaultConfig()) {
         ollama_host: cfg.ollamaHost,
         model: cfg.model,
         endpoint: "/v1/chat/completions",
+        site: "/",
         stream: true,
         reasoning: true,
         auth: "none",
