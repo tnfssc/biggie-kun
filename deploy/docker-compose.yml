@@ -12,6 +12,7 @@ services:
     environment:
       OLLAMA_HOST: ${OLLAMA_HOST:-http://host.docker.internal:11434}
       BIGGIE_MODEL: ${BIGGIE_MODEL:-llama3.2}
+      BIGGIE_MAX_REQUEST_BYTES: ${BIGGIE_MAX_REQUEST_BYTES:-4100000000}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     command:
@@ -25,7 +26,7 @@ services:
       - --model
       - ${BIGGIE_MODEL:-llama3.2}
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:11500/health"]
+      test: ["CMD", "/usr/local/bin/biggie-kun", "healthcheck"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -33,7 +34,7 @@ services:
 
   cloudflared:
     # Public hostname should target http://biggie-kun:11500
-    image: cloudflare/cloudflared:latest
+    image: cloudflare/cloudflared@sha256:e39ee8da81ad5e05d77f38d2f51c60ca51bf2a8450ac3abab50c17fdb91d91bf
     command: tunnel --no-autoupdate run --token ${CLOUDFLARED_TUNNEL_TOKEN:?set CLOUDFLARED_TUNNEL_TOKEN in .env}
     restart: unless-stopped
     depends_on:

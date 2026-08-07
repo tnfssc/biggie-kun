@@ -4,10 +4,11 @@
 
 # biggie-kun
 
-**1 billion token context window.** It just works differently.
+**A chat model with a 1 billion-token context window.**
 
-OpenAI-compatible chat API. No auth. Context stays in RAM. Ships as one opaque
-binary in Docker.
+Send the whole conversation when you need it. No sessions, uploads, vector
+stores, or model-specific client code—just normal OpenAI-compatible chat
+completions.
 
 ```bash
 curl -s http://127.0.0.1:11500/v1/chat/completions \
@@ -15,7 +16,8 @@ curl -s http://127.0.0.1:11500/v1/chat/completions \
   -d '{
     "model": "biggie-kun",
     "messages": [
-      {"role":"user","content":"The launch window is 04:30 UTC. When is launch?"}
+      {"role":"user","content":"The launch window is 04:30 UTC."},
+      {"role":"user","content":"When is launch?"}
     ]
   }'
 ```
@@ -24,55 +26,23 @@ curl -s http://127.0.0.1:11500/v1/chat/completions \
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| `GET` | `/` | landing page + call examples |
-| `POST` | `/v1/chat/completions` | only public completion endpoint |
-| `GET` | `/health` | liveness + upstream Ollama |
+| `GET` | `/` | model homepage |
+| `POST` | `/v1/chat/completions` | JSON or streaming chat completion |
+| `GET` | `/health` | model readiness |
 
-Open. No API keys.
+The endpoint accepts fixed-length and chunked JSON request bodies. There is no
+authentication.
 
-### Memory (`memory_id`)
+### Context
 
-Optional **server-side RAM session** so later turns can reuse prior context
-without resending the full history.
+Send the complete conversation in `messages`, exactly as you would with any
+other chat-completions model. The context window is 1,000,000,000 estimated
+tokens. Token usage follows `ceil(UTF-8 bytes / 4)`.
 
-| How to set | Example |
-| --- | --- |
-| JSON body | `"memory_id": "my-session"` |
-| Header | `x-memory-id: my-session` |
-| Header | `x-biggie-memory: my-session` |
-| OpenAI `user` field | `"user": "alice"` → key `user:alice` |
+The default maximum JSON body is 4.1 GB, leaving room for one billion tokens
+plus request framing. Configure it with `BIGGIE_MAX_REQUEST_BYTES`.
 
-The response echoes `"memory_id"` when a session is active.
-
-```bash
-# turn 1
-curl -s http://127.0.0.1:11500/v1/chat/completions \
-  -H 'content-type: application/json' \
-  -H 'x-memory-id: demo' \
-  -d '{"model":"biggie-kun","messages":[{"role":"user","content":"Code is CODE-ORANGE99."}]}'
-
-# turn 2 — short message; server still has turn 1 in RAM
-curl -s http://127.0.0.1:11500/v1/chat/completions \
-  -H 'content-type: application/json' \
-  -H 'x-memory-id: demo' \
-  -d '{"model":"biggie-kun","messages":[{"role":"user","content":"What is the code?"}]}'
-```
-
-Notes:
-- **Not auth.** Anyone who knows the id can continue that session on this process.
-- **RAM only** — never written to disk. Gone on restart, TTL expiry, or size eviction.
-- **Optional.** You can instead send a full multi-turn `messages` array (standard OpenAI style) with no `memory_id`.
-
-### Usage
-
-`usage.prompt_tokens` is the size of **your input**
-(`ceil(utf8_bytes / 4)`, capped at 1B).  
-If you send ~100M tokens of content, the response reports ~100M prompt tokens.
-
-`completion_tokens` = reasoning + answer.  
-`completion_tokens_details.reasoning_tokens` = reasoning only.
-
-### Streaming + reasoning
+### Streaming reasoning
 
 ```bash
 curl -N http://127.0.0.1:11500/v1/chat/completions \
@@ -80,73 +50,37 @@ curl -N http://127.0.0.1:11500/v1/chat/completions \
   -d '{
     "model": "biggie-kun",
     "stream": true,
-    "include_reasoning": true,
-    "messages": [
-      {"role":"user","content":"The launch window is 04:30 UTC. When is launch?"}
-    ]
+    "messages": [{"role":"user","content":"When is the launch?"}]
   }'
 ```
 
-SSE order: `role` → `delta.reasoning_content*` → `delta.content*` → `finish_reason` + `usage` → `[DONE]`.  
-Set `"include_reasoning": false` to skip thinking.
+SSE order:
+
+```text
+role → reasoning_content* → content* → finish_reason + usage → [DONE]
+```
+
+Set `"include_reasoning": false` to return only answer content.
 
 ## Limits
 
 | Limit | Default |
 | --- | ---: |
+| Context window | 1,000,000,000 tokens |
+| Maximum JSON body | 4,100,000,000 bytes |
 | Requests / hour / IP | 10 |
-| Input tokens / hour / IP | 1 000 000 000 |
+| Input tokens / hour / IP | 1,000,000,000 |
 | Link pace | 32 Mbit/s |
-| Global concurrency | 1 |
+| Concurrent completions | 1 |
 
-IP from `CF-Connecting-IP`, then `X-Forwarded-For`, then the socket.
-
-## How it works
-
-Small contexts answer in one pass. Large contexts stay in a RAM index; the
-controller model issues bounded recall steps, then a presenter rewrites the
-public answer so internals never leak. From the outside it is one model with a
-1B-token window.
-
-## Quick start
-
-### Docker
+## Build
 
 ```bash
 docker build -t biggie-kun .
-docker run --rm --network host \
-  -e OLLAMA_HOST=http://127.0.0.1:11434 \
-  biggie-kun serve --model llama3.2
 ```
 
-Needs a reachable [Ollama](https://ollama.com) with your controller model.
-
-### Dev
-
-```bash
-cd server
-node --test
-node src/cli.js serve --model llama3.2
-```
-
-### Compose + Cloudflare Tunnel
-
-See [`deploy/`](./deploy) — same pattern as a typical self-hosted stack:
-
-```bash
-cp deploy/.env.example deploy/.env
-# set CLOUDFLARED_TUNNEL_TOKEN (hostname → http://biggie-kun:11500)
-docker compose --env-file deploy/.env -f deploy/docker-compose.yml up -d --build
-```
-
-## Layout
-
-```
-server/          Node gateway + RAM memory + presenter
-deploy/          docker compose + cloudflared
-assets/          logo + favicon
-Dockerfile       bun --compile → single binary, no sources in runtime image
-```
+Want the implementation details, limitations, self-hosting setup, and the honest
+story behind the billion-token window? [Dig deeper](./DIG_DEEPER.md).
 
 ## License
 

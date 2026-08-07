@@ -5,18 +5,11 @@
 **/.env
 **/.env.local
 
-# deps / build
-node_modules/
+# build
 dist/
 build/
 out/
 *.log
-
-# python leftovers
-__pycache__/
-*.py[cod]
-.venv/
-venv/
 
 # os / editor
 .DS_Store
@@ -31,7 +24,6 @@ results/
 *.sqlite3
 *.jsonl
 
-# bun / compile artifacts
+# compile artifacts
 *.exe
 biggie-kun
-!server/src/

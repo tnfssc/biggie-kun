@@ -1,7 +1,4 @@
 **/.git
-**/node_modules
-**/__pycache__
-**/*.pyc
 **/.env
 **/.env.*
 deploy/.env
@@ -11,3 +8,6 @@ results/
 *.md
 !README.md
 assets/
+server/biggie-kun
+server/src/
+server/test/
