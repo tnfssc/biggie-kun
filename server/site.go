@@ -44,7 +44,7 @@ const FaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512
 func init() {
 	const oldHeadline = `<h1><span>1,000,000,000</span> context window model.</h1>`
 	const headline = `<h1><span>1-Billion-Token</span> Context Window. <em>It’s Absolutely Unreal.</em></h1>`
-	const paperLink = `<a class="hero-paper" href="https://github.com/tnfssc/biggie-kun/blob/main/paper.pdf" target="_blank" rel="noreferrer">Read the paper.pdf <span aria-hidden="true">↗</span></a>`
+	const paperLink = `<a class="hero-paper" href="https://doi.org/10.5281/zenodo.21852829" target="_blank" rel="noreferrer">Read the paper.pdf <span aria-hidden="true">↗</span></a>`
 	LandingHTML = strings.Replace(LandingHTML, oldHeadline, headline+paperLink, 1)
 	LandingHTML = strings.Replace(LandingHTML, `<title>biggie-kun · big context, one chat</title>`, `<title>1-Billion-Token Context Window · biggie-kun</title>`, 1)
 }

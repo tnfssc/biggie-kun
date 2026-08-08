@@ -6,6 +6,8 @@
 
 **A chat model with a 1 billion-token context window.**
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21852829.svg)](https://doi.org/10.5281/zenodo.21852829)
+
 Send the whole conversation when you need it. No sessions, uploads, vector
 stores, or model-specific client code—just normal OpenAI-compatible chat
 completions.
@@ -81,6 +83,12 @@ docker build -t biggie-kun .
 
 Want the implementation details, limitations, self-hosting setup, and the honest
 story behind the billion-token window? [Dig deeper](./DIG_DEEPER.md).
+
+## Paper
+
+[**1-Billion-Token Context Window. It’s Absolutely Unreal.**](https://doi.org/10.5281/zenodo.21852829)
+is the accompanying preprint. Version 1.0.0 has not been peer reviewed and is
+licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/).
 
 ## License
 

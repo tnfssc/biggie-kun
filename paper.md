@@ -1,6 +1,9 @@
 # 1-Billion-Token Context Window. It’s Absolutely Unreal.
 
-**Sharath**
+**Sharath**<br>
+*Preprint · Version 1.0.0 · 8 August 2026*<br>
+[https://doi.org/10.5281/zenodo.21852829](https://doi.org/10.5281/zenodo.21852829)<br>
+*Licensed under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)*
 
 ---
 

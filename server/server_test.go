@@ -560,7 +560,7 @@ func TestLandingServesSilentLogoLoop(t *testing.T) {
 			t.Fatalf("landing page missing %q", expected)
 		}
 	}
-	if !strings.Contains(page, `href="https://github.com/tnfssc/biggie-kun/blob/main/paper.pdf"`) || !strings.Contains(page, "Read the paper.pdf") {
+	if !strings.Contains(page, `href="https://doi.org/10.5281/zenodo.21852829"`) || !strings.Contains(page, "Read the paper.pdf") {
 		t.Fatal("landing page is missing the paper CTA")
 	}
 	if !strings.Contains(page, "1-Billion-Token") || !strings.Contains(page, "It’s Absolutely Unreal.") {

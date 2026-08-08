@@ -1,0 +1,18 @@
+cff-version: 1.2.0
+message: "If you use biggie-kun, please cite the software and its accompanying preprint."
+title: "biggie-kun"
+type: software
+authors:
+  - family-names: "Sharath"
+version: 1.0.0
+date-released: 2026-08-08
+url: "https://github.com/tnfssc/biggie-kun"
+license: MIT
+preferred-citation:
+  type: article
+  authors:
+    - family-names: "Sharath"
+  title: "1-Billion-Token Context Window. It’s Absolutely Unreal."
+  year: 2026
+  doi: "10.5281/zenodo.21852829"
+  url: "https://doi.org/10.5281/zenodo.21852829"
