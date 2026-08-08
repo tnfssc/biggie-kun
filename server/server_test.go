@@ -560,6 +560,9 @@ func TestLandingServesSilentLogoLoop(t *testing.T) {
 			t.Fatalf("landing page missing %q", expected)
 		}
 	}
+	if !strings.Contains(page, `href="https://github.com/tnfssc/biggie-kun/blob/main/paper.pdf"`) || !strings.Contains(page, "Read the paper.pdf") {
+		t.Fatal("landing page is missing the paper CTA")
+	}
 	videoRequest := httptest.NewRequest(http.MethodGet, "/logo-loop.mp4", nil)
 	videoRecorder := httptest.NewRecorder()
 	server.Handler().ServeHTTP(videoRecorder, videoRequest)
