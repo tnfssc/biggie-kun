@@ -17,9 +17,9 @@ IDs and no server-side conversation store.
 3. Larger inputs are divided into overlapping byte blocks and indexed in RAM.
 4. A controller model searches for specific terms, reads candidate blocks, and
    may repeat this process for multiple hops.
-5. A finish action is accepted only when the cited evidence contains the answer.
-6. A presenter turns the extractive draft into the public answer.
-7. The request-scoped corpus, block table, postings, evidence, and transcript
+5. The controller's first usable answer is returned directly. There is no
+   adjudicator, grounding gate, or presentation pass.
+6. The request-scoped corpus, block table, postings, excerpts, and transcript
    references are released when the completion ends. Nothing is retained for a
    later request.
 
@@ -65,10 +65,10 @@ about 100 million estimated tokens.
 
 ## Reasoning stream
 
-For large requests, every controller turn emits a short public
-`reasoning_content` delta after its action completes. A final reasoning pass is
-then streamed in small chunks before answer content. Set
-`include_reasoning: false` to disable all reasoning deltas.
+For large requests, a controller action may emit a short, content-specific
+`reasoning_content` delta. Generic process updates are suppressed, and there is
+no separate final reasoning pass. Set `include_reasoning: false` to disable all
+reasoning deltas.
 
 These updates are intentionally phrased as user-facing reasoning rather than a
 dump of controller JSON, block identifiers, or internal prompts.
@@ -82,21 +82,18 @@ attention:
   right block.
 - Multi-hop answers depend on the controller discovering the next identifier.
 - Highly duplicated keys require reading every plausible match within budget.
-- The presenter can improve phrasing but cannot recover facts the retrieval
-  phase never found.
-- The server deliberately returns an insufficient-context answer rather than
-  accepting an ungrounded extractive result.
+- Controller answers are trusted and may be incomplete or wrong; the loop favors
+  responsiveness and exploration over deterministic verification.
 
 ## Self-hosting
 
-The binary uses an Ollama chat model as its controller, direct-answer model,
-presenter, and reasoning voice.
+The binary uses an Ollama chat model as its controller and direct-answer model.
 
 ```bash
 docker build -t biggie-kun .
 docker run --rm --network host \
   -e OLLAMA_HOST=http://127.0.0.1:11434 \
-  biggie-kun serve --model llama3.2
+  biggie-kun serve --model qwen3.5:4b
 ```
 
 Or use the Cloudflare Tunnel deployment:
@@ -117,7 +114,7 @@ largest requests.
 cd server
 go test ./...
 go test -race ./...
-go run ./cmd/biggie-kun serve --model llama3.2
+go run ./cmd/biggie-kun serve --model qwen3.5:4b
 ```
 
 The final container is a pinned, non-root distroless image containing one static

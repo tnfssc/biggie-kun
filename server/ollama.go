@@ -20,6 +20,7 @@ type ModelRequest struct {
 	NumPredict  int
 	Temperature float64
 	JSONFormat  bool
+	JSONSchema  map[string]any
 	Think       *bool
 }
 
@@ -62,7 +63,9 @@ func ollamaPayload(request ModelRequest, stream bool) map[string]any {
 		"keep_alive": "30m",
 		"options":    map[string]any{"num_ctx": request.NumCtx, "num_predict": request.NumPredict, "temperature": request.Temperature},
 	}
-	if request.JSONFormat {
+	if request.JSONSchema != nil {
+		payload["format"] = request.JSONSchema
+	} else if request.JSONFormat {
 		payload["format"] = "json"
 	}
 	if request.Think != nil {

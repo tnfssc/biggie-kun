@@ -90,6 +90,15 @@ func TestOllamaClientReturnsContent(t *testing.T) {
 	}
 }
 
+func TestOllamaPayloadUsesControllerSchema(t *testing.T) {
+	payload := ollamaPayload(ModelRequest{JSONFormat: true, JSONSchema: controllerSchema([]string{"search", "answer"})}, false)
+	format, ok := payload["format"].(map[string]any)
+	variants, variantsOK := format["oneOf"].([]any)
+	if !ok || !variantsOK || len(variants) != 2 {
+		t.Fatalf("controller schema was replaced by generic JSON mode: %#v", payload["format"])
+	}
+}
+
 func TestOllamaClientStreamsContent(t *testing.T) {
 	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
 		var payload map[string]any
@@ -391,11 +400,10 @@ func TestFallbackPresenterDoesNotReturnArbitraryEvidence(t *testing.T) {
 
 func TestStreamingEmitsReasoningOnEveryAgentTurn(t *testing.T) {
 	model := &scriptedModel{responses: []string{
-		`{"action":"search","queries":["CASE-Z9Q7"],"top_k":12}`,
-		`{"action":"read","result_ids":["s1r1"],"neighbors":0}`,
-		`{"action":"finish","answer":"CODE-ORANGE99","evidence_ids":["e1"]}`,
+		`{"action":"search","queries":["CASE-Z9Q7"],"top_k":12,"thought":"CASE record locations"}`,
+		`{"action":"read","result_ids":["s1r1"],"neighbors":0,"thought":"CASE code entry"}`,
+		`{"action":"answer","thought":"CASE code matches"}`,
 		"CODE-ORANGE99",
-		"The matching record gives the requested code.",
 	}}
 	cfg := testConfig()
 	cfg.DirectTokenThreshold = 1
@@ -421,8 +429,13 @@ func TestStreamingEmitsReasoningOnEveryAgentTurn(t *testing.T) {
 	if !strings.Contains(stream, "CODE-ORANGE99") || !strings.HasSuffix(stream, "data: [DONE]\n\n") {
 		t.Fatalf("incomplete stream:\n%s", stream)
 	}
-	if len(model.requests) != 5 {
-		t.Fatalf("expected controller, presenter, and reasoning calls, got %d", len(model.requests))
+	if len(model.requests) != 4 || model.requests[3].Purpose != "answer" {
+		t.Fatalf("expected three tool decisions and one answer call, got %#v", model.requests)
+	}
+	for _, request := range model.requests {
+		if request.Think == nil || *request.Think {
+			t.Fatalf("large-context phase %q did not disable model thinking", request.Purpose)
+		}
 	}
 }
 
@@ -430,6 +443,78 @@ func TestParseActionWithTrailingText(t *testing.T) {
 	action, ok := ParseAction("note\n{\"action\":\"search\",\"queries\":[\"KEY\"]}\ntrailing")
 	if !ok || action.Action != "search" || len(action.Queries) != 1 {
 		t.Fatalf("failed to recover action: %#v %v", action, ok)
+	}
+}
+
+func TestAgentTrustsSynthesizedAnswer(t *testing.T) {
+	model := &scriptedModel{responses: []string{
+		`{"action":"search","queries":["io_uring_task_cancel"],"top_k":12}`,
+		`{"action":"read","result_ids":["s1r1"],"neighbors":0}`,
+		`{"action":"finish"}`,
+		"io_uring stays safe because io_uring_task_cancel drains pending requests before shutdown completes.",
+	}}
+	index := NewBlockIndex("io_uring_task_cancel drains pending requests before shutdown completes.", IndexOptions{})
+	result, err := RunAgent(context.Background(), model, index, "How does io_uring stay safe during shutdown?", AgentOptions{MaxTurns: 30, NumCtx: 32768, ScanBytes: 400_000, Model: "test"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.FinishReason != "answer" || result.Turns != 4 || !strings.Contains(result.Answer, "io_uring stays safe") {
+		t.Fatalf("synthesized answer was rejected: %#v", result)
+	}
+}
+
+func TestAgentDoesNotVerifyAnswer(t *testing.T) {
+	model := &scriptedModel{responses: []string{
+		`{"action":"search","queries":["io_uring_task_cancel"],"top_k":12}`,
+		`{"action":"read","result_ids":["s1r1"],"neighbors":0}`,
+		`{"action":"answer"}`,
+		"A factorial program uses scanf and printf.",
+	}}
+	index := NewBlockIndex("io_uring_task_cancel drains pending requests before shutdown completes.", IndexOptions{})
+	result, err := RunAgent(context.Background(), model, index, "How does io_uring stay safe during shutdown?", AgentOptions{MaxTurns: 30, NumCtx: 32768, ScanBytes: 400_000, Model: "test"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Answer != "A factorial program uses scanf and printf." || result.Turns != 4 || len(model.requests) != 4 {
+		t.Fatalf("agent verified or retried the answer: result=%#v calls=%d", result, len(model.requests))
+	}
+}
+
+func TestAgentRepairsMalformedActionOnce(t *testing.T) {
+	model := &scriptedModel{responses: []string{
+		"not json",
+		`{"action":"answer"}`,
+		"A direct repaired answer.",
+	}}
+	index := NewBlockIndex("small document", IndexOptions{})
+	result, err := RunAgent(context.Background(), model, index, "Question?", AgentOptions{MaxTurns: 12, NumCtx: 32768, ScanBytes: 400_000, MaxTokens: 128, Model: "test"}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Answer != "A direct repaired answer." || result.ProtocolRepairs != 1 || len(model.requests) != 3 {
+		t.Fatalf("malformed action repair was not bounded: result=%#v calls=%d", result, len(model.requests))
+	}
+}
+
+func TestAgentOutputFilters(t *testing.T) {
+	if got := FilterAgentThought("I found likely context and I'm checking it closely"); got != "" {
+		t.Fatalf("generic thought was exposed: %q", got)
+	}
+	if got := FilterAgentThought("Cancellation drains pending requests safely"); got != "Cancellation drains pending requests safely" {
+		t.Fatalf("specific thought was lost: %q", got)
+	}
+	if got := FilterAgentThought("Need to find code for CASE-LOOP-08B"); got != "code for CASE-LOOP-08B" {
+		t.Fatalf("specific subject was not salvaged: %q", got)
+	}
+	if got := FilterAgentThought("The search result snippet mentions CASE-LOOP-08B"); got != "CASE-LOOP-08B" {
+		t.Fatalf("search preface was not removed: %q", got)
+	}
+	answer := "Based on the context, I inspected the relevant files.\n\nCancellation drains pending work before shutdown."
+	if got := FilterAgentAnswer(answer); got != "Cancellation drains pending work before shutdown." {
+		t.Fatalf("process preface was not removed: %q", got)
+	}
+	if got := FilterAgentAnswer("Cancellation drains pending work as noted in the document excerpt."); got != "Cancellation drains pending work." {
+		t.Fatalf("process suffix was not removed: %q", got)
 	}
 }
 

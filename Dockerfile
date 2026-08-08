@@ -29,4 +29,4 @@ CMD ["serve", \
      "--listen", "0.0.0.0", \
      "--port", "11500", \
      "--ollama-host", "http://host.docker.internal:11434", \
-     "--model", "llama3.2"]
+     "--model", "qwen3.5:4b"]

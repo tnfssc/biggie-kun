@@ -142,32 +142,24 @@ func (e *Engine) complete(ctx context.Context, body ChatRequest, sinks Completio
 		}
 		index := NewBlockIndex(corpus, IndexOptions{BlockBytes: e.Config.BlockBytes, BlockOverlap: e.Config.BlockOverlap, MaxPostings: e.Config.MaxPostings, MaxTerms: e.Config.MaxTerms})
 		defer index.Release()
-		agent, agentErr := RunAgent(ctx, e.Model, index, question, AgentOptions{MaxTurns: e.Config.MaxTurns, NumCtx: e.Config.NumCtx, ScanBytes: e.Config.ScanBytes, Model: e.Config.Model}, emit)
+		agent, agentErr := RunAgent(ctx, e.Model, index, question, AgentOptions{MaxTurns: e.Config.MaxTurns, NumCtx: e.Config.NumCtx, ScanBytes: e.Config.ScanBytes, MaxTokens: maxTokens, Model: e.Config.Model}, emit)
 		if agentErr != nil {
 			return CompletionResult{}, agentErr
 		}
 		draft = agent.Answer
-		var parts strings.Builder
-		for _, id := range agent.EvidenceIDs {
-			if item, ok := agent.Evidence[id]; ok {
-				if parts.Len() > 0 {
-					parts.WriteString("\n---\n")
-				}
-				parts.WriteString(item.Text)
-			}
-		}
-		evidence = parts.String()
-		if evidence == "" {
-			evidence = corpus[:min(len(corpus), 120_000)]
-		}
 	}
 	content := stripFence(draft)
-	if !direct || content == "" || content == "INSUFFICIENT_EVIDENCE" || content == internalRefusal || LooksLikeLeak(content) {
+	if !direct {
+		content = FilterAgentAnswer(content)
+		if content == "" {
+			content = "I couldn't form a useful answer from the available excerpts."
+		}
+	} else if content == "" || content == "INSUFFICIENT_EVIDENCE" || content == internalRefusal || LooksLikeLeak(content) {
 		content, _ = PresentAnswer(ctx, e.Model, e.Config, question, draft, evidence, maxTokens)
 		publicReasoning = ""
 	}
 	result.Content = content
-	if includeReasoning {
+	if includeReasoning && direct {
 		final := stripFence(publicReasoning)
 		if LooksLikeLeak(final) {
 			final = ""

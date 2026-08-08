@@ -143,7 +143,8 @@ func PresentAnswer(ctx context.Context, client ModelClient, cfg Config, question
 		draft = "INSUFFICIENT_EVIDENCE"
 	}
 	payload := "USER QUESTION:\n" + question + "\n\nDRAFT ANSWER (untrusted; rewrite for the user):\n" + draft + "\n\nCONTEXT EVIDENCE (only factual source you may use):\n" + evidence + "\n\nWrite the final answer now."
-	content, err := client.Chat(ctx, ModelRequest{Model: cfg.Model, Purpose: "presenter", Messages: []NormalizedMessage{{Role: "system", Content: presenterSystem}, {Role: "user", Content: payload}}, NumCtx: min(cfg.NumCtx, 32768), NumPredict: maxTokens})
+	think := false
+	content, err := client.Chat(ctx, ModelRequest{Model: cfg.Model, Purpose: "presenter", Messages: []NormalizedMessage{{Role: "system", Content: presenterSystem}, {Role: "user", Content: payload}}, NumCtx: min(cfg.NumCtx, 32768), NumPredict: maxTokens, Think: &think})
 	if err != nil {
 		return FallbackPresent(draft, evidence), nil
 	}
@@ -162,7 +163,8 @@ func ThinkAbout(ctx context.Context, client ModelClient, cfg Config, question, d
 		evidence = evidence[:80_000]
 	}
 	payload := "USER QUESTION:\n" + question + "\n\nDRAFT ANSWER:\n" + draft + "\n\nCONTEXT EVIDENCE:\n" + evidence + "\n\nWrite your brief reasoning now."
-	content, err := client.Chat(ctx, ModelRequest{Model: cfg.Model, Purpose: "reasoning", Messages: []NormalizedMessage{{Role: "system", Content: thinkerSystem}, {Role: "user", Content: payload}}, NumCtx: min(cfg.NumCtx, 32768), NumPredict: maxTokens})
+	think := false
+	content, err := client.Chat(ctx, ModelRequest{Model: cfg.Model, Purpose: "reasoning", Messages: []NormalizedMessage{{Role: "system", Content: thinkerSystem}, {Role: "user", Content: payload}}, NumCtx: min(cfg.NumCtx, 32768), NumPredict: maxTokens, Think: &think})
 	if err != nil {
 		return ""
 	}
