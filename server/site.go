@@ -24,7 +24,7 @@ var LandingHTML = strings.Replace(`<!doctype html>
 @media(min-width:40rem){.nav-note{display:block}.familiar{width:calc(var(--logo-size-wide) + var(--space-2xl))}.logo-loop{width:var(--logo-size-wide);height:var(--logo-size-wide)}.hero-mark{max-width:18ch}.ritual-intro{grid-template-columns:minmax(0,.9fr) minmax(0,1.1fr);align-items:end}}
 @media(min-width:60rem){.hero{min-height:76dvh}.ritual-grid{grid-template-columns:minmax(0,1fr)}}
 .hero{min-height:76dvh;padding-block:calc(var(--space-xl) + var(--nav-height)) var(--space-3xl)}.hero h1 span{text-underline-offset:var(--space-3xs)}.nav-note,.hero-mark{font-family:var(--font-body)}.nav-action,.nav-action:hover{color:var(--color-accent-ink)}a[aria-disabled="true"]{color:var(--color-muted);cursor:not-allowed;pointer-events:none}.hero-mark{display:none}@media(min-width:40rem){.hero-mark{display:block}}
-.hero{justify-items:start;row-gap:var(--space-lg)}.hero-paper{position:relative;z-index:var(--z-raised);display:inline-flex;align-items:center;gap:var(--space-xs);padding:var(--space-sm) var(--space-md);border:var(--rule-thin) solid var(--color-rule);border-radius:var(--radius-sm);background:var(--color-paper-2);box-shadow:var(--space-3xs) var(--space-3xs) 0 var(--color-rule);font:700 var(--text-sm)/1 var(--font-mono);text-decoration:none}.hero-paper:hover{color:var(--color-accent);transform:translate(-1px,-1px);box-shadow:var(--space-2xs) var(--space-2xs) 0 var(--color-rule)}
+.hero{justify-items:start;row-gap:var(--space-lg)}.hero h1 em{display:block;max-width:13ch;margin-block-start:var(--space-sm);color:var(--color-ink);font:700 var(--text-xl)/.96 var(--font-display);font-style:normal;letter-spacing:-.04em}.hero-paper{position:relative;z-index:var(--z-raised);display:inline-flex;align-items:center;gap:var(--space-xs);padding:var(--space-sm) var(--space-md);border:var(--rule-thin) solid var(--color-rule);border-radius:var(--radius-sm);background:var(--color-paper-2);box-shadow:var(--space-3xs) var(--space-3xs) 0 var(--color-rule);font:700 var(--text-sm)/1 var(--font-mono);text-decoration:none}.hero-paper:hover{color:var(--color-accent);transform:translate(-1px,-1px);box-shadow:var(--space-2xs) var(--space-2xs) 0 var(--color-rule)}
 .nav{border-radius:var(--radius-sm)}.nav-action{border-radius:var(--space-xs)}
 @media(pointer:coarse){.nav-action{min-height:2.75rem}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation-duration:150ms!important;animation-iteration-count:1!important;transition-duration:150ms!important}.reveal{animation:reveal 150ms linear forwards}.scale-marquee-track{width:auto;animation:none}.scale-marquee-set{flex-wrap:wrap;justify-content:center;white-space:normal}.scale-marquee-set[aria-hidden="true"]{display:none}}
@@ -42,7 +42,9 @@ var LandingHTML = strings.Replace(`<!doctype html>
 const FaviconSVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><rect width="512" height="512" rx="112" fill="#f7f4e8"/><ellipse cx="256" cy="270" rx="168" ry="158" fill="#fffef6" stroke="#1a2744" stroke-width="22"/><ellipse cx="206" cy="242" rx="20" ry="26" fill="#1a2744"/><ellipse cx="306" cy="242" rx="20" ry="26" fill="#1a2744"/><path d="M218 302 C234 328 278 328 294 302" fill="none" stroke="#1a2744" stroke-width="18" stroke-linecap="round"/></svg>`
 
 func init() {
-	const headline = `<h1><span>1,000,000,000</span> context window model.</h1>`
+	const oldHeadline = `<h1><span>1,000,000,000</span> context window model.</h1>`
+	const headline = `<h1><span>1-Billion-Token</span> Context Window. <em>It’s Absolutely Unreal.</em></h1>`
 	const paperLink = `<a class="hero-paper" href="https://github.com/tnfssc/biggie-kun/blob/main/paper.pdf" target="_blank" rel="noreferrer">Read the paper.pdf <span aria-hidden="true">↗</span></a>`
-	LandingHTML = strings.Replace(LandingHTML, headline, headline+paperLink, 1)
+	LandingHTML = strings.Replace(LandingHTML, oldHeadline, headline+paperLink, 1)
+	LandingHTML = strings.Replace(LandingHTML, `<title>biggie-kun · big context, one chat</title>`, `<title>1-Billion-Token Context Window · biggie-kun</title>`, 1)
 }

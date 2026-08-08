@@ -1,4 +1,4 @@
-# I Made a 1 Billion Context LLM by Cheating
+# 1-Billion-Token Context Window. It’s Absolutely Unreal.
 
 **Sharath**
 

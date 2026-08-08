@@ -563,6 +563,9 @@ func TestLandingServesSilentLogoLoop(t *testing.T) {
 	if !strings.Contains(page, `href="https://github.com/tnfssc/biggie-kun/blob/main/paper.pdf"`) || !strings.Contains(page, "Read the paper.pdf") {
 		t.Fatal("landing page is missing the paper CTA")
 	}
+	if !strings.Contains(page, "1-Billion-Token") || !strings.Contains(page, "It’s Absolutely Unreal.") {
+		t.Fatal("landing page is missing the paper title")
+	}
 	videoRequest := httptest.NewRequest(http.MethodGet, "/logo-loop.mp4", nil)
 	videoRecorder := httptest.NewRecorder()
 	server.Handler().ServeHTTP(videoRecorder, videoRequest)
