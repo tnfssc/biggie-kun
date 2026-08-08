@@ -96,6 +96,10 @@ func Transcript(messages []NormalizedMessage) string {
 	return out.String()
 }
 
+func directConversationPrompt(messages []NormalizedMessage) string {
+	return "CONVERSATION:\n" + Transcript(messages) + "\n\nAnswer the latest user request."
+}
+
 func SplitQuestionDocument(messages []NormalizedMessage) (question, document string) {
 	last := len(messages) - 1
 	for i := len(messages) - 1; i >= 0; i-- {

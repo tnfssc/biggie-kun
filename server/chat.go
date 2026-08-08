@@ -127,7 +127,7 @@ func (e *Engine) complete(ctx context.Context, body ChatRequest, sinks Completio
 	}
 	if direct {
 		contextText := Transcript(messages)
-		prompt := "USER QUESTION:\n" + question + "\n\nCONTEXT EVIDENCE:\n" + contextText + "\n\nReturn the JSON object now."
+		prompt := directConversationPrompt(messages) + "\nReturn the JSON object now."
 		think := false
 		response, modelErr := e.Model.Chat(ctx, ModelRequest{Model: e.Config.Model, Purpose: "direct", Messages: []NormalizedMessage{{Role: "system", Content: directSystem}, {Role: "user", Content: prompt}, {Role: "assistant", Content: "{"}}, NumCtx: e.Config.NumCtx, NumPredict: maxTokens, Temperature: body.Temperature, Think: &think})
 		if modelErr != nil {

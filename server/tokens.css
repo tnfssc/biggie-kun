@@ -1,18 +1,28 @@
-/* Hallmark · genre: modern-minimal · tone: technical · macrostructure: Workbench · theme: Cobalt · enrichment: supplied logo loop
- * nav: N9 · footer: Ft2 · contrast: pass (40–41) · slop: pass (42–49) · mobile: pass (34, 49–57)
- * pre-emit critique: P5 H4 E5 S5 R5 V5
+/* Hallmark · genre: atmospheric · audience: anime nerds · use: try the 1B-context API · tone: cute-mystical-technical
+ * macrostructure: Marquee Hero · theme: Midnight · enrichment: supplied mascot loop + CSS constellation halo
+ * nav: N5 (content-sized, top-centred) · footer: Ft5 (38ch statement) · contrast: pass (40–41) · mobile: pass (34, 49–57)
+ * pre-emit critique: P5 H5 E5 S5 R5 V5
  */
 :root {
-  --color-paper: oklch(98% 0.008 255);
-  --color-ink: oklch(19% 0.018 255);
-  --color-muted: oklch(46% 0.018 255);
-  --color-rule: oklch(84% 0.012 255);
-  --color-code: oklch(17% 0.024 255);
-  --color-code-ink: oklch(94% 0.014 255);
-  --color-accent: oklch(61% 0.19 255);
-  --color-accent-soft: oklch(78% 0.12 245);
-  --color-focus: oklch(52% 0.2 255);
-  --font-display: "Space Grotesk", ui-sans-serif, sans-serif;
+  --color-paper: oklch(13% 0.025 285);
+  --color-paper-2: oklch(17% 0.03 285);
+  --color-paper-3: oklch(22% 0.034 285);
+  --color-ink: oklch(95% 0.018 82);
+  --color-muted: oklch(74% 0.025 285);
+  --color-rule: oklch(34% 0.035 285);
+  --color-code: oklch(10% 0.022 285);
+  --color-code-ink: oklch(92% 0.02 82);
+  --color-accent: oklch(76% 0.16 25);
+  --color-accent-ink: oklch(14% 0.025 285);
+  --color-accent-soft: oklch(87% 0.08 52);
+  --color-focus: oklch(83% 0.17 65);
+  --color-halo: oklch(48% 0.13 18);
+  --color-shadow: oklch(6% 0.018 285);
+  --color-scale-paper: oklch(97% 0.014 78);
+  --color-scale-ink: oklch(24% 0.025 35);
+  --color-scale-pink: oklch(72% 0.19 15);
+  --color-scale-teal: oklch(70% 0.14 180);
+  --font-display: "Bricolage Grotesque", ui-sans-serif, sans-serif;
   --font-body: "IBM Plex Sans", ui-sans-serif, sans-serif;
   --font-mono: "JetBrains Mono", ui-monospace, monospace;
   --text-xs: 0.75rem;
@@ -20,10 +30,13 @@
   --text-base: 1rem;
   --text-md: 1.25rem;
   --text-lg: 1.5625rem;
-  --text-2xl: clamp(2rem, 4vw, 3.05rem);
-  --text-display: clamp(3rem, 7vw, 5.25rem);
+  --text-xl: 1.953rem;
+  --text-2xl: clamp(2rem, 4vw, 3.25rem);
+  --text-display: clamp(3.35rem, 9vw, 7rem);
   --space-3xs: 0.125rem;
   --space-2xs: 0.25rem;
+  --space-xs: 0.5rem;
+  --space-sm: 0.75rem;
   --space-md: 1rem;
   --space-lg: 1.5rem;
   --space-xl: 2.5rem;
@@ -33,8 +46,18 @@
   --rule-thin: 1px;
   --rule-thick: 2px;
   --rule-focus: 3px;
+  --radius-sm: 0.75rem;
+  --radius-card: 1.5rem;
   --radius-round: 999px;
-  --logo-size: 7rem;
-  --logo-size-wide: 9rem;
-  --shell: 72rem;
+  --shell: 78rem;
+  --nav-height: 3.25rem;
+  --logo-size: 8rem;
+  --logo-size-wide: 11rem;
+  --z-base: 1;
+  --z-raised: 10;
+  --z-sticky: 200;
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --dur-micro: 120ms;
+  --dur-short: 220ms;
+  --dur-long: 420ms;
 }

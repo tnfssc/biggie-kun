@@ -13,6 +13,7 @@ out/
 
 # os / editor
 .DS_Store
+.hallmark/
 .idea/
 .vscode/
 *.swp

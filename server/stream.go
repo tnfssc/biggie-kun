@@ -246,7 +246,7 @@ func (s *directResponseStream) SinkFailed() bool  { return s.sinkFailed }
 
 func (e *Engine) completeDirectStream(ctx context.Context, client StreamingModelClient, body ChatRequest, messages []NormalizedMessage, question string, includeReasoning bool, maxTokens int, result CompletionResult, sinks CompletionSinks) (CompletionResult, error) {
 	evidence := Transcript(messages)
-	prompt := "USER QUESTION:\n" + question + "\n\nCONTEXT EVIDENCE:\n" + evidence
+	prompt := directConversationPrompt(messages)
 	system := directStreamSystem
 	prefix := `{"reasoning":"`
 	if !includeReasoning {

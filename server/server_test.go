@@ -184,6 +184,43 @@ func TestDirectCompletionUsesOneStructuredModelCall(t *testing.T) {
 	}
 }
 
+func TestSingleMessageDirectPromptUsesConversationOnce(t *testing.T) {
+	message := "Launch is prolly on 27th Aug 2027. When is the launch?"
+	model := &scriptedModel{responses: []string{`{"answer":"27th August 2027","reasoning":"The message states the launch date."}`}}
+	engine := NewEngine(testConfig(), model)
+	result, err := engine.Complete(context.Background(), ChatRequest{Model: Product, Messages: []Message{{Role: "user", Content: message}}}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "27th August 2027" {
+		t.Fatalf("unexpected answer: %#v", result)
+	}
+	prompt := model.requests[0].Messages[1].Content
+	if strings.Count(prompt, message) != 1 || !strings.Contains(prompt, "CONVERSATION:\n[user]\n") || strings.Contains(prompt, "USER QUESTION:") || strings.Contains(prompt, "CONTEXT EVIDENCE:") {
+		t.Fatalf("single message was framed ambiguously:\n%s", prompt)
+	}
+}
+
+func TestSingleMessageDirectStreamPromptUsesConversationOnce(t *testing.T) {
+	message := "Launch is prolly on 27th Aug 2027. When is the launch?"
+	model := &streamingScriptedModel{chunks: []string{`The message states the launch date.","answer":"27th August 2027"}`}}
+	engine := NewEngine(testConfig(), model)
+	result, err := engine.complete(context.Background(), ChatRequest{Model: Product, Stream: true, Messages: []Message{{Role: "user", Content: message}}}, CompletionSinks{
+		Reasoning: func(string) error { return nil },
+		Content:   func(string) error { return nil },
+	}, "test-completion")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Content != "27th August 2027" || len(model.streamCalls) != 1 {
+		t.Fatalf("unexpected streamed completion: result=%#v calls=%d", result, len(model.streamCalls))
+	}
+	prompt := model.streamCalls[0].Messages[1].Content
+	if strings.Count(prompt, message) != 1 || !strings.Contains(prompt, "CONVERSATION:\n[user]\n") || strings.Contains(prompt, "USER QUESTION:") || strings.Contains(prompt, "CONTEXT EVIDENCE:") {
+		t.Fatalf("single streamed message was framed ambiguously:\n%s", prompt)
+	}
+}
+
 func TestDirectCompletionRejectsWrongJSONShape(t *testing.T) {
 	includeReasoning := false
 	model := &scriptedModel{responses: []string{`["04:30 UTC"]`, "04:30 UTC"}}

@@ -40,7 +40,7 @@ func DefaultConfig() Config {
 		OllamaHost:           firstEnv("OLLAMA_HOST", "BIGGIE_OLLAMA_HOST", "http://127.0.0.1:11434"),
 		Model:                envString("BIGGIE_MODEL", "llama3.2"),
 		MaxRequestBytes:      envInt64("BIGGIE_MAX_REQUEST_BYTES", DefaultMaxBodyBytes),
-		MaxTurns:             envInt("BIGGIE_MAX_TURNS", 10),
+		MaxTurns:             envInt("BIGGIE_MAX_TURNS", 30),
 		NumCtx:               envInt("BIGGIE_NUM_CTX", 32768),
 		ScanBytes:            envInt("BIGGIE_SCAN_BYTES", 400_000),
 		BlockBytes:           envInt("BIGGIE_BLOCK_BYTES", 16_384),
